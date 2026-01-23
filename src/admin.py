@@ -2,6 +2,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, jsonify, make_response
 from linebot.models import TextSendMessage
 import google.generativeai as genai
+import time # 用於防止快取或其他時間處理
 
 from src.line_bot_api import line_bot_api
 from src.text_processor import analyze_folder_words, segment_text
@@ -62,7 +63,8 @@ def delete_modifier_route():
 # ==========================================
 @admin_blueprint.route('/admin/review', methods=['GET'])
 def review_page():
-    # 這是給瀏覽器直接打開用的，會回傳完整網頁 (外殼 + 內容)
+    # 這是給瀏覽器直接打開用的，會回傳完整網頁 (外殼)
+    # 第一次載入也順便給資料，避免空白太久
     pending_msgs = get_pending_messages()
     for msg in pending_msgs:
         msg['segmented_words'] = segment_text(msg['user_message'])
@@ -107,7 +109,10 @@ def ai_generate():
     data = request.json
     keywords = data.get('keywords', [])
     if not keywords: return jsonify({"suggestion": "請先勾選關鍵字..."})
-    if not Config.GEMINI_API_KEY: return jsonify({"suggestion": "❌ 未設定 API Key"})
+    
+    # 檢查 API Key 是否設定，若無則回傳模擬訊息
+    if not Config.GEMINI_API_KEY: 
+        return jsonify({"suggestion": "❌ 未設定 API Key，無法連接 AI。"})
          
     try:
         genai.configure(api_key=Config.GEMINI_API_KEY)

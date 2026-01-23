@@ -1,1 +1,61 @@
-1
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>對話紀錄 (Live)</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .fade-in { animation: fadeIn 0.3s; }
+    </style>
+</head>
+<body class="bg-light">
+
+<div class="container py-4" style="max-width: 800px;">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="mb-0">📜 歷史紀錄 <span class="badge bg-danger fs-6">Live</span></h3>
+        <a href="/admin" class="btn btn-outline-secondary btn-sm">回主控台</a>
+    </div>
+
+    <div class="card mb-4 shadow-sm border-0">
+        <div class="card-body">
+            <form action="/admin/history" method="POST" class="row g-2">
+                <div class="col-md-9">
+                    <input type="text" name="user_id" id="search-input" class="form-control" 
+                           value="{{ user_id }}" placeholder="輸入 User ID (例如: U12345...)" required>
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary w-100">🔍 搜尋/監控</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="live-history-content">
+        {% include 'history_content.html' %}
+    </div>
+
+</div>
+
+<script>
+    const currentUserId = "{{ user_id }}";
+    
+    function autoRefreshHistory() {
+        if (!currentUserId) return;
+
+        // 🔥 關鍵修正：加上 new Date().getTime() 防止快取
+        fetch(`/admin/api/history_content?user_id=${currentUserId}&t=` + new Date().getTime())
+            .then(r => r.text())
+            .then(html => {
+                const container = document.getElementById('live-history-content');
+                if (container) container.innerHTML = html;
+            })
+            .catch(e => console.error(e));
+    }
+
+    setInterval(autoRefreshHistory, 3000);
+</script>
+
+</body>
+</html>

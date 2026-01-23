@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>訊息審核 (Live)</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .word-checkbox { display: none; }
+        .word-label { cursor: pointer; padding: 4px 10px; border: 1px solid #ced4da; border-radius: 20px; font-size: 0.9em; background: #fff; transition: 0.2s; }
+        .word-checkbox:checked + .word-label { background-color: #0d6efd; color: white; border-color: #0d6efd; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .fade-in { animation: fadeIn 0.4s ease-out; }
+    </style>
+</head>
+<body class="bg-light">
+
+<div class="container py-4" style="max-width: 800px;">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="mb-0">🛡️ 訊息審核 <span class="badge bg-danger fs-6 blink">Live</span></h3>
+        <a href="/admin" class="btn btn-outline-secondary btn-sm">回主控台</a>
+    </div>
+
+    <div id="live-review-content">
+        {% include 'review_content.html' %}
+    </div>
+</div>
+
+<script>
+    // 1. AI 生成
+    async function generateAI(msgId) {
+        const checkboxes = document.querySelectorAll(`input[id^="w_${msgId}_"]:checked`);
+        let keywords = [];
+        checkboxes.forEach((cb) => keywords.push(cb.value));
+        if (keywords.length === 0) { alert("請先勾選關鍵字"); return; }
+        
+        const textArea = document.getElementById(`response_${msgId}`);
+        textArea.value = "🔄 AI 生成中...";
+        try {
+            const res = await fetch('/admin/api/generate', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ keywords: keywords })
+            });
+            const data = await res.json();
+            textArea.value = data.suggestion;
+        } catch { textArea.value = "連線失敗"; }
+    }
+
+    // 2. 自動更新 (防止快取版)
+    function autoRefresh() {
+        // 防止在操作時更新干擾
+        const isBusy = document.querySelectorAll('input[type="checkbox"]:checked').length > 0 || 
+                       (document.activeElement && document.activeElement.tagName === 'TEXTAREA');
+        
+        if (isBusy) {
+            console.log("使用者操作中，暫停更新...");
+            return;
+        }
+
+        // 🔥 關鍵修正：加上 new Date().getTime() 防止快取
+        fetch('/admin/api/review_content?t=' + new Date().getTime())
+            .then(r => r.text())
+            .then(html => {
+                const container = document.getElementById('live-review-content');
+                if (container) container.innerHTML = html;
+            })
+            .catch(e => console.error("更新失敗:", e));
+    }
+
+    // 每 3 秒檢查一次
+    setInterval(autoRefresh, 3000);
+</script>
+</body>
+</html>

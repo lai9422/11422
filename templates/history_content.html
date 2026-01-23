@@ -1,0 +1,29 @@
+{% if user_id and history %}
+    <div class="d-flex justify-content-between align-items-center mb-3 fade-in">
+        <h5 class="mb-0 text-primary">User: {{ user_id[:8] }}... 的對話</h5>
+        <a href="/admin/history/export/{{ user_id }}" class="btn btn-success btn-sm">📥 匯出 TXT</a>
+    </div>
+
+    <div class="chat-box border rounded bg-white p-3 shadow-sm fade-in" style="height: 500px; overflow-y: auto;">
+        {% for row in history %}
+            <div class="d-flex flex-column mb-3 {% if row.role == 'bot' %}align-items-end{% else %}align-items-start{% endif %}">
+                <div class="d-flex align-items-center mb-1">
+                    <span class="badge {% if row.role == 'bot' %}bg-primary{% else %}bg-secondary{% endif %} me-2">
+                        {% if row.role == 'bot' %}Bot{% else %}User{% endif %}
+                    </span>
+                    <small class="text-muted" style="font-size: 0.75em;">{{ row.created_at }}</small>
+                </div>
+                <div class="p-2 rounded text-break" 
+                     style="max-width: 80%; background-color: {% if row.role == 'bot' %}#cfe2ff{% else %}#f8f9fa{% endif %}; border: 1px solid #dee2e6;">
+                    {{ row.message }}
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+{% elif user_id %}
+    <div class="alert alert-warning mt-3 fade-in">找不到此 User ID 的紀錄。</div>
+{% else %}
+    <div class="text-center text-muted mt-5 fade-in">
+        <p>請輸入 User ID 以查看即時對話。</p>
+    </div>
+{% endif %}
