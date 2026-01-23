@@ -1,0 +1,55 @@
+{% if pending_msgs %}
+    {% for msg in pending_msgs %}
+    <div class="card mb-4 shadow-sm border-0 fade-in">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <span class="badge bg-warning text-dark">待處理</span>
+            <small class="text-muted">{{ msg.created_at }}</small>
+        </div>
+        <div class="card-body">
+            <div class="mb-3 p-2 bg-light border-start border-4 border-secondary text-secondary">
+                {{ msg.user_message }}
+            </div>
+
+            <form action="/admin/process_reply" method="POST">
+                <input type="hidden" name="msg_id" value="{{ msg.id }}">
+                <input type="hidden" name="user_id" value="{{ msg.user_id }}">
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold text-primary small">Step 1: 勾選關鍵字 (去識別化)</label>
+                    <div class="d-flex flex-wrap gap-1">
+                        {% for word in msg.segmented_words %}
+                        <div>
+                            <input type="checkbox" id="w_{{ msg.id }}_{{ loop.index }}" 
+                                   name="selected_keywords" value="{{ word }}" class="word-checkbox">
+                            <label for="w_{{ msg.id }}_{{ loop.index }}" class="word-label">{{ word }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <label class="form-label fw-bold small">Step 2: 回覆內容</label>
+                        <button class="btn btn-outline-primary btn-sm py-0" type="button" onclick="generateAI('{{ msg.id }}')">
+                            🤖 AI 建議
+                        </button>
+                    </div>
+                    <textarea name="final_response" id="response_{{ msg.id }}" class="form-control" rows="3" placeholder="輸入回覆..." required></textarea>
+                </div>
+
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="save_to_db" id="save_{{ msg.id }}" checked>
+                    <label class="form-check-label small text-muted" for="save_{{ msg.id }}">存入資料庫學習</label>
+                </div>
+
+                <button type="submit" class="btn btn-success w-100 btn-sm">發送</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="text-center py-5 text-muted">
+        <h4>🎉 目前沒有新訊息</h4>
+        <p class="small">系統正持續監控中...</p>
+    </div>
+{% endif %}
