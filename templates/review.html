@@ -16,9 +16,29 @@
 <body class="bg-light">
 
 <div class="container py-4" style="max-width: 800px;">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
         <h3 class="mb-0">🛡️ 訊息審核 <span class="badge bg-danger fs-6 blink">Live</span></h3>
         <a href="/admin" class="btn btn-outline-secondary btn-sm">回主控台</a>
+    </div>
+
+    <div class="card mb-3 shadow-sm border-0">
+        <div class="card-body py-2">
+            <form action="/admin/review" method="GET" class="row g-2 align-items-center">
+                <div class="col-auto">
+                    <label class="fw-bold small">篩選使用者:</label>
+                </div>
+                <div class="col">
+                    <input type="text" name="user_id" class="form-control form-control-sm" 
+                           value="{{ user_id }}" placeholder="輸入 User ID (留空顯示全部)">
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary btn-sm">🔍 搜尋</button>
+                    {% if user_id %}
+                    <a href="/admin/review" class="btn btn-outline-secondary btn-sm">清除</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
     </div>
 
     <div id="live-review-content">
@@ -27,47 +47,53 @@
 </div>
 
 <script>
-    // 1. AI 生成
-    async function generateAI(msgId) {
-        const checkboxes = document.querySelectorAll(`input[id^="w_${msgId}_"]:checked`);
-        let keywords = [];
-        checkboxes.forEach((cb) => keywords.push(cb.value));
-        if (keywords.length === 0) { alert("請先勾選關鍵字"); return; }
-        
+    // 取得目前篩選的 User ID (給 JS 用)
+    const currentFilterUser = "{{ user_id }}";
+
+    async function generateAI_WithHistory(msgId) {
+        // 1. 當前關鍵字
+        const currentCbs = document.querySelectorAll(`input[id^="w_${msgId}_"]:checked`);
+        let currentKws = [];
+        currentCbs.forEach(cb => currentKws.push(cb.value));
+
+        // 2. 歷史關鍵字
+        const historyCbs = document.querySelectorAll(`input[name="history_kws_${msgId}"]:checked`);
+        let historyKws = [];
+        historyCbs.forEach(cb => historyKws.push(cb.value));
+
+        if (currentKws.length === 0 && historyKws.length === 0) {
+            alert("請至少勾選一個關鍵字(當前或歷史)！");
+            return;
+        }
+
         const textArea = document.getElementById(`response_${msgId}`);
         textArea.value = "🔄 AI 生成中...";
         try {
             const res = await fetch('/admin/api/generate', {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ keywords: keywords })
+                body: JSON.stringify({ keywords: currentKws, history_keywords: historyKws })
             });
             const data = await res.json();
             textArea.value = data.suggestion;
         } catch { textArea.value = "連線失敗"; }
     }
 
-    // 2. 自動更新 (防止快取版)
     function autoRefresh() {
-        // 防止在操作時更新干擾
         const isBusy = document.querySelectorAll('input[type="checkbox"]:checked').length > 0 || 
                        (document.activeElement && document.activeElement.tagName === 'TEXTAREA');
-        
-        if (isBusy) {
-            console.log("使用者操作中，暫停更新...");
-            return;
+        if (isBusy) return;
+
+        // 🔥 URL 加上 user_id 參數，確保搜尋狀態不被洗掉
+        let url = '/admin/api/review_content?t=' + new Date().getTime();
+        if (currentFilterUser) {
+            url += '&user_id=' + encodeURIComponent(currentFilterUser);
         }
 
-        // 🔥 關鍵修正：加上 new Date().getTime() 防止快取
-        fetch('/admin/api/review_content?t=' + new Date().getTime())
+        fetch(url)
             .then(r => r.text())
-            .then(html => {
-                const container = document.getElementById('live-review-content');
-                if (container) container.innerHTML = html;
-            })
-            .catch(e => console.error("更新失敗:", e));
+            .then(html => document.getElementById('live-review-content').innerHTML = html)
+            .catch(e => console.error(e));
     }
-
-    // 每 3 秒檢查一次
     setInterval(autoRefresh, 3000);
 </script>
 </body>

@@ -12,7 +12,7 @@ from src.database import (
     get_intents, update_keywords_in_db, insert_new_category, 
     get_all_modifiers, add_modifier, delete_modifier,
     get_pending_messages, update_message_status,
-    log_chat, get_chat_history_by_user
+    log_chat, get_chat_history_by_user, get_recent_chat_history
 )
 
 admin_blueprint = Blueprint('admin', __name__)
@@ -64,41 +64,44 @@ def delete_modifier_route():
 # ==========================================
 @admin_blueprint.route('/admin/review', methods=['GET'])
 def review_page():
-    # 這是給瀏覽器直接打開用的，會回傳完整網頁 (外殼)
-    # 第一次載入也順便給資料，避免空白太久
-    pending_msgs = get_pending_messages()
-    for msg in pending_msgs:
-        msg['segmented_words'] = segment_text(msg['user_message'])
-    return render_template('review.html', pending_msgs=pending_msgs)
-
-# @admin_blueprint.route('/admin/api/review_content')
-# def api_review_content():
-#     # 🔥 這是給 JS 自動更新用的，只回傳「review_content.html」
-#     pending_msgs = get_pending_messages()
-#     for msg in pending_msgs:
-#         msg['segmented_words'] = segment_text(msg['user_message'])
-#     return render_template('review_content.html', pending_msgs=pending_msgs)
-
-# 1. 更新：取得審核內容 API (加入歷史紀錄斷詞)
-@admin_blueprint.route('/admin/api/review_content')
-def api_review_content():
-    pending_msgs = get_pending_messages()
+    # 接收搜尋參數
+    target_user_id = request.args.get('user_id', '').strip()
     
+    # 傳入 user_id 進行過濾
+    pending_msgs = get_pending_messages(user_id=target_user_id if target_user_id else None)
+    
+    # 斷詞處理 + 載入歷史紀錄
     for msg in pending_msgs:
-        # A. 當前訊息斷詞
         msg['segmented_words'] = segment_text(msg['user_message'])
         
-        # B. 【新增】取得該用戶最近 3 筆歷史紀錄
-        history_rows = get_recent_chat_history(msg['user_id'], limit=3)
+        # 取得該用戶最近 5 筆歷史 (不包含當前這則 pending 的)
+        history_rows = get_recent_chat_history(msg['user_id'], limit=5)
         
-        # C. 【新增】對每一筆歷史紀錄也進行斷詞
+        # 對歷史紀錄也進行斷詞
         for h_row in history_rows:
             h_row['segmented_words'] = segment_text(h_row['message'])
             
         msg['history_context'] = history_rows
 
-    return render_template('review_content.html', pending_msgs=pending_msgs)
+    return render_template('review.html', pending_msgs=pending_msgs, user_id=target_user_id)
 
+@admin_blueprint.route('/admin/api/review_content')
+def api_review_content():
+    # 接收搜尋參數 (給 AJAX 用)
+    target_user_id = request.args.get('user_id', '').strip()
+    
+    pending_msgs = get_pending_messages(user_id=target_user_id if target_user_id else None)
+    
+    for msg in pending_msgs:
+        msg['segmented_words'] = segment_text(msg['user_message'])
+        
+        # 載入歷史
+        history_rows = get_recent_chat_history(msg['user_id'], limit=5)
+        for h_row in history_rows:
+            h_row['segmented_words'] = segment_text(h_row['message'])
+        msg['history_context'] = history_rows
+        
+    return render_template('review_content.html', pending_msgs=pending_msgs)
 
 @admin_blueprint.route('/admin/process_reply', methods=['POST'])
 def process_reply():
@@ -126,99 +129,37 @@ def process_reply():
 # ==========================================
 # 3. AI API
 # ==========================================
-# @admin_blueprint.route('/admin/api/generate', methods=['POST'])
-# def ai_generate():
-#     data = request.json
-#     keywords = data.get('keywords', [])
-#     if not keywords: return jsonify({"suggestion": "請先勾選關鍵字..."})
-    
-#     # 檢查 API Key 是否設定，若無則回傳模擬訊息
-#     if not Config.GEMINI_API_KEY: 
-#         return jsonify({"suggestion": "❌ 未設定 API Key，無法連接 AI。"})
-         
-#     try:
-#         genai.configure(api_key=Config.GEMINI_API_KEY)
-#         model = genai.GenerativeModel('gemini-pro')
-#         prompt = (
-#             f"你是一個溫暖的輔導機器人。使用者訊息關鍵字：{', '.join(keywords)}。"
-#             f"請生成一段溫暖、同理且簡短的回覆建議(100字內)。"
-#         )
-#         response = model.generate_content(prompt)
-#         return jsonify({"suggestion": response.text})
-#     except Exception as e:
-#         return jsonify({"suggestion": f"AI Error: {e}"})
-
-
-
-
-# @admin_blueprint.route('/admin/api/generate', methods=['POST'])
-# def ai_generate():
-#     data = request.json
-#     keywords = data.get('keywords', [])
-    
-#     if not keywords:
-#         return jsonify({"suggestion": "請先勾選關鍵字，讓暖暖知道該怎麼回應。"})
-
-#     if not Config.GEMINI_API_KEY:
-#          return jsonify({"suggestion": "❌ 錯誤：尚未設定 AI KEY。無法連接志AI服務。"})
-         
-#     try:
-#         genai.configure(api_key=Config.GEMINI_API_KEY)
-#         model = genai.GenerativeModel('gemini-pro')
-
-#         # ==========================================
-#         # 🔥 修改：使用 Config 中的人設模板
-#         # ==========================================
-#         # 將關鍵字組合成字串
-#         keywords_str = "、".join(keywords)
-        
-#         # 填入模板
-#         prompt = Config.AI_CHARACTER_PROMPT.format(keywords=keywords_str)
-
-#         # 呼叫 AI
-#         response = model.generate_content(prompt)
-#         ai_reply = response.text
-
-#         return jsonify({"suggestion": ai_reply})
-
-#     except Exception as e:
-#         print(f"❌ 錯誤：尚未設定 AI KEY。無法連接志AI服務。: {e}")
-#         return jsonify({"suggestion": f"暖暖目前連線不穩，請稍後再試。\n(Error: {e})"})
-
 
 # 2. 更新：AI 生成 API (接收前後文)
 @admin_blueprint.route('/admin/api/generate', methods=['POST'])
 def ai_generate():
     data = request.json
-    
-    # 前端會傳來兩組關鍵字
-    current_keywords = data.get('keywords', [])           # 當前訊息的關鍵字
-    history_keywords = data.get('history_keywords', [])   # 歷史紀錄的關鍵字 (已去識別化)
+    current_keywords = data.get('keywords', [])
+    history_keywords = data.get('history_keywords', [])
 
     if not current_keywords and not history_keywords:
-        return jsonify({"suggestion": "請至少勾選一些關鍵字(當前或歷史)，AI 才能生成。"})
-
-    if not Config.GEMINI_API_KEY:
-         return jsonify({"suggestion": "❌ 未設定 GEMINI_API_KEY"})
+        return jsonify({"suggestion": "請至少勾選一些關鍵字(當前或歷史)。"})
+    
+    if not Config.GEMINI_API_KEY: 
+        return jsonify({"suggestion": "❌ 未設定 API Key"})
          
     try:
         genai.configure(api_key=Config.GEMINI_API_KEY)
         model = genai.GenerativeModel('gemini-pro')
-
-        # 3. 組合 Prompt (包含前後文)
+        
+        # 組合 Prompt
         context_str = "、".join(history_keywords)
         current_str = "、".join(current_keywords)
         
+        # 這裡可以加入您之前設定的「暖暖」人設
         prompt = (
             f"你是一個溫暖的輔導機器人「暖暖」。\n"
-            f"【前情提要 (僅有關鍵字)】：{context_str}\n"
-            f"【使用者目前訊息 (僅有關鍵字)】：{current_str}\n\n"
-            f"請根據以上脈絡，忽略個資，生成一段溫暖、同理的回覆建議 (100字內)。"
+            f"【前情提要 (去識別化關鍵字)】：{context_str}\n"
+            f"【使用者目前訊息 (去識別化關鍵字)】：{current_str}\n\n"
+            f"請根據以上脈絡，生成一段溫暖、同理、不帶批判性的回覆建議 (100字內)。"
         )
-
         response = model.generate_content(prompt)
         return jsonify({"suggestion": response.text})
-
     except Exception as e:
         return jsonify({"suggestion": f"AI Error: {e}"})
 
