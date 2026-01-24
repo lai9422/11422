@@ -1,24 +1,28 @@
 # 程式架構
 ```
-my_line_bot/
-├── .env                  (維持不變)
-├── run.py                (維持不變)
-├── config.py             (維持不變)
-├── mydict.txt            (維持不變: 自訂字典檔)
-├── delete_words.txt      (維持不變: 停用詞檔案)
-├── files/                (📂新增: 專門放置要給機器人學習的文章 .txt 檔案)
-├── templates/            (📂新增: Flask 網頁模板資料夾)
-│   └── admin.html        (🔥新: 訓練後台的網頁介面 HTML)
-└── src/
-    ├── __init__.py       (🔄修: 新增註冊 admin 藍圖)
-    ├── line_bot_api.py   (維持不變)
-    ├── controller.py     (維持不變: 專門處理 Line Webhook 請求)
-    ├── admin.py          (🔥新: 專門處理後台網頁邏輯 /admin)
-    ├── database.py       (🔄修: 新增「寫入/更新」資料庫的函式)
-    ├── ai_client.py      (維持不變: 處理 Gemini AI)
-    ├── text_processor.py (🔄修: 新增「批量讀取 files 資料夾」功能)
-    ├── intent_matcher.py (維持不變: 處理關鍵字比對)
-    └── service.py        (維持不變: 指揮官)
+11422 (專案根目錄)
+├── run.py                 # 🚀 程式啟動入口 (Entry Point)
+├── config.py              # ⚙️ 設定檔 (讀取 .env 環境變數)
+├── .env                   # 🔑 敏感資訊 (API Key, DB 密碼，需自行建立)
+├── requirements.txt       # (推測) 套件依賴清單
+├── files/                 # 📂 放置文本資料的資料夾 (用於分析高頻詞)
+│   └── a.txt              # ...
+├── templates/             # 🎨 前端 HTML 模板 (Flask Template)
+│   ├── admin.html         # 後台儀表板
+│   ├── review.html        # 訊息審核頁面
+│   ├── history.html       # 歷史紀錄頁面
+│   └── ...
+└── src/                   # 🧠 核心程式碼邏輯包
+    ├── __init__.py        # Flask App 工廠模式 (註冊 Blueprint)
+    ├── admin.py           # 🔧 後台管理邏輯 (Dashboard, Review, Gemini API)
+    ├── ai_client.py       # 🤖 回覆修飾模組 (加上語氣詞、前綴後綴)
+    ├── controller.py      # 🌐 LINE Webhook 入口 (驗證簽章)
+    ├── database.py        # 🗄️ 資料庫操作 (MySQL 連線, CRUD)
+    ├── intent_matcher.py  # 🔍 意圖比對邏輯 (關鍵字匹配)
+    ├── line_bot_api.py    # 📲 初始化 LINE Bot API 物件
+    ├── service.py         # ⚙️ 核心業務邏輯 (決定自動回覆或轉人工)
+    ├── test_chat.py       # 🧪 網頁版聊天測試介面
+    └── text_processor.py  # ✂️ 斷詞處理 (Jieba, 停用詞過濾)
 ```
 
 # 函式安裝  
