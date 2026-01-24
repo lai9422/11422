@@ -9,8 +9,6 @@
         .word-tag { display: inline-block; padding: 5px 10px; margin: 3px; border-radius: 15px; background-color: #e9ecef; cursor: pointer; }
         .word-tag:hover { background-color: #ced4da; }
         .word-tag.selected { background-color: #0d6efd; color: white; }
-        .intent-card { transition: all 0.3s; }
-        .intent-card:hover { transform: translateY(-3px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
     </style>
 </head>
 <body class="bg-light">
@@ -34,8 +32,8 @@
                 <div class="col-md-4">
                     <label class="form-label fw-bold">審核頁面「前情提要」顯示筆數</label>
                     <input type="number" name="context_limit" class="form-control" 
-                           value="{{ context_limit }}" min="1" max="20" required>
-                    <div class="form-text">設定在審核每一則訊息時，要顯示過去幾則對話紀錄供參考。</div>
+                           value="{{ context_limit }}" min="1" required>
+                    <div class="form-text">設定在審核時，顯示過去 N 則對話紀錄 (無上限)。</div>
                 </div>
                 <div class="col-md-2">
                     <button type="submit" class="btn btn-success w-100">💾 儲存設定</button>
@@ -131,9 +129,11 @@
                                 <div class="col">
                                     <select name="danger_level" class="form-select">
                                         <option value="0">🟢 安全 (Level 0)</option>
-                                        <option value="1">🟡 輕微 (Level 1)</option>
+                                        <option value="1">🔵 輕微 (Level 1)</option>
+                                        <option value="2">🟡 注意 (Level 2)</option>
                                         <option value="3">🟠 警示 (Level 3)</option>
-                                        <option value="5">🔴 危險 (Level 5)</option>
+                                        <option value="4">🔴 危險 (Level 4)</option>
+                                        <option value="5">☠️ 極危 (Level 5)</option>
                                     </select>
                                 </div>
                             </div>
@@ -195,40 +195,31 @@
 
 <script>
     let selectedWords = new Set();
-
     function selectWord(word) {
         if (selectedWords.has(word)) return;
         selectedWords.add(word);
         renderSelectedWords();
     }
-
     function removeWord(word) {
         selectedWords.delete(word);
         renderSelectedWords();
     }
-
     function renderSelectedWords() {
         const container = document.getElementById('selected-words-container');
         const hiddenDiv = document.getElementById('hidden-inputs');
-        
         container.innerHTML = '';
         hiddenDiv.innerHTML = '';
-
         if (selectedWords.size === 0) {
             container.innerHTML = '<span class="text-muted small ms-2">請從左側點擊詞彙...</span>';
             return;
         }
-
         selectedWords.forEach(word => {
-            // 顯示標籤
             const tag = document.createElement('span');
             tag.className = 'badge bg-primary me-1 mb-1';
             tag.style.cursor = 'pointer';
             tag.innerHTML = `${word} &times;`;
             tag.onclick = () => removeWord(word);
             container.appendChild(tag);
-
-            // 隱藏欄位
             const input = document.createElement('input');
             input.type = 'hidden';
             input.name = 'selected_words';
@@ -236,7 +227,6 @@
             hiddenDiv.appendChild(input);
         });
     }
-
     function toggleMode() {
         const isNew = document.getElementById('mode-new').checked;
         document.getElementById('new-intent-block').style.display = isNew ? 'block' : 'none';

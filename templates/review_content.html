@@ -60,9 +60,21 @@
                     <textarea name="final_response" id="response_{{ msg.id }}" class="form-control" rows="3" placeholder="AI 建議將顯示於此..." required></textarea>
                 </div>
 
+                <div class="mb-3">
+                    <label class="form-label fw-bold small">危險程度 (Danger Level)</label>
+                    <select name="danger_level" class="form-select form-select-sm">
+                        <option value="0" selected>🟢 安全 (Level 0)</option>
+                        <option value="1">🔵 輕微 (Level 1)</option>
+                        <option value="2">🟡 注意 (Level 2)</option>
+                        <option value="3">🟠 警示 (Level 3)</option>
+                        <option value="4">🔴 危險 (Level 4)</option>
+                        <option value="5">☠️ 極危 (Level 5)</option>
+                    </select>
+                </div>
+
                 <div class="form-check mb-2">
                     <input class="form-check-input" type="checkbox" name="save_to_db" id="save_{{ msg.id }}" checked>
-                    <label class="form-check-label small text-muted" for="save_{{ msg.id }}">存入資料庫學習</label>
+                    <label class="form-check-label small text-muted" for="save_{{ msg.id }}">存入資料庫學習 (含危險等級)</label>
                 </div>
 
                 <button type="submit" class="btn btn-success w-100 btn-sm">發送</button>

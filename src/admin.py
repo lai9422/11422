@@ -11,7 +11,7 @@ from src.database import (
     get_all_modifiers, add_modifier, delete_modifier,
     get_pending_messages, update_message_status,
     log_chat, get_chat_history_by_user, get_recent_chat_history,
-    get_system_setting, set_system_setting # <--- 引入新函式
+    get_system_setting, set_system_setting
 )
 
 admin_blueprint = Blueprint('admin', __name__)
@@ -25,7 +25,7 @@ def admin_dashboard():
     top_words = analyze_folder_words(folder_path='./files', top_n=30)
     modifiers = get_all_modifiers()
     
-    # 🔥 讀取目前設定的「前情提要筆數」，預設 5 筆
+    # 讀取設定，若無則預設 5
     context_limit = get_system_setting('context_limit', 5)
     
     return render_template('admin.html', 
@@ -34,11 +34,11 @@ def admin_dashboard():
                            modifiers=modifiers,
                            context_limit=context_limit)
 
-# 🔥 新增：儲存系統設定
 @admin_blueprint.route('/admin/settings/update', methods=['POST'])
 def update_settings():
     limit = request.form.get('context_limit')
     if limit:
+        # 這裡只存入，不做 max 限制，由前端 input type="number" 控制是否為整數
         set_system_setting('context_limit', limit)
     return redirect(url_for('admin.admin_dashboard'))
 
@@ -80,21 +80,15 @@ def delete_modifier_route():
 @admin_blueprint.route('/admin/review', methods=['GET'])
 def review_page():
     target_user_id = request.args.get('user_id', '').strip()
-    
-    # 🔥 讀取設定的 Limit
     limit_setting = int(get_system_setting('context_limit', 5))
 
     pending_msgs = get_pending_messages(user_id=target_user_id if target_user_id else None)
     
     for msg in pending_msgs:
         msg['segmented_words'] = segment_text(msg['user_message'])
-        
-        # 使用設定的 Limit 抓取歷史
         history_rows = get_recent_chat_history(msg['user_id'], limit=limit_setting)
-        
         for h_row in history_rows:
             h_row['segmented_words'] = segment_text(h_row['message'])
-            
         msg['history_context'] = history_rows
 
     return render_template('review.html', pending_msgs=pending_msgs, user_id=target_user_id)
@@ -102,16 +96,12 @@ def review_page():
 @admin_blueprint.route('/admin/api/review_content')
 def api_review_content():
     target_user_id = request.args.get('user_id', '').strip()
-    
-    # 🔥 讀取設定的 Limit
     limit_setting = int(get_system_setting('context_limit', 5))
     
     pending_msgs = get_pending_messages(user_id=target_user_id if target_user_id else None)
     
     for msg in pending_msgs:
         msg['segmented_words'] = segment_text(msg['user_message'])
-        
-        # 使用設定的 Limit
         history_rows = get_recent_chat_history(msg['user_id'], limit=limit_setting)
         for h_row in history_rows:
             h_row['segmented_words'] = segment_text(h_row['message'])
@@ -126,6 +116,9 @@ def process_reply():
     final_response = request.form.get('final_response')
     selected_keywords = request.form.getlist('selected_keywords')
     save_to_db = request.form.get('save_to_db')
+    
+    # 🔥 新增：接收危險程度 (預設為 0)
+    danger_level = request.form.get('danger_level', 0)
 
     try:
         line_bot_api.push_message(user_id, TextSendMessage(text=final_response))
@@ -136,10 +129,18 @@ def process_reply():
 
     update_message_status(msg_id, 'replied')
 
+    # 若勾選存入資料庫，將 danger_level 一併寫入
     if save_to_db and selected_keywords:
-        insert_new_category(f"Learned_Case_{msg_id}", 0, final_response, "NONE", selected_keywords)
+        insert_new_category(
+            category=f"Learned_Case_{msg_id}", 
+            danger=int(danger_level),  # <--- 使用管理員設定的等級
+            response=final_response, 
+            action="NONE", 
+            keywords=selected_keywords
+        )
 
     return redirect(url_for('admin.review_page'))
+
 
 # ==========================================
 # 3. AI API
@@ -173,6 +174,7 @@ def ai_generate():
         return jsonify({"suggestion": response.text})
     except Exception as e:
         return jsonify({"suggestion": f"AI Error: {e}"})
+
 
 # ==========================================
 # 4. History
