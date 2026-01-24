@@ -158,92 +158,80 @@ http://127.0.0.1:5001/admin
 # AI說明
 以下為您詳細解釋每個檔案的功能與職責：
 
-1. 核心入口與設定 (Root)
+🧩 各模組詳細功能說明
+1. 啟動與設定層
+run.py:
 
-run.py (程式入口)
+負責啟動 Flask Server。
 
-功能：這是整個網站的啟動按鈕。
+會在 Console 印出後台管理連結 (/admin)。
 
-職責：它會呼叫 src 資料夾裡的程式來建立網站伺服器 (Flask App)，並開始監聽網路請求。執行它之後，你的機器人與後台網頁才會上線。
+config.py:
 
-config.py (設定檔)
+集中管理環境變數 (LINE_CHANNEL_SECRET, DB_PASSWORD 等)。
 
-功能：專案的「控制中心」。
+定義 AI_CHARACTER_PROMPT (雖然目前主要用在 admin.py 的 Gemini 生成建議)。
 
-職責：負責讀取 .env 檔案裡的機密資訊（如 Line Token、資料庫密碼），讓其他程式可以安全地使用這些變數，而不需要把密碼寫死在程式碼裡。
+2. 網路介面層 (Controllers)
+src/controller.py:
 
-1. 網站與路由層 (Web Layer)
-src/__init__.py (初始化)
+處理 LINE 平台傳來的 Webhook 請求。
 
-功能：Flask 網站的工廠。
+負責驗證簽章 (X-Line-Signature)。
 
-職責：負責將所有的模組（Admin 後台、Controller 控制器）組裝起來，變成一個完整的應用程式。
+將合法請求交給 handler 處理。
 
-src/controller.py (路由控制器)
+src/admin.py:
 
-功能：對外的「總機櫃檯」。
+提供網頁後台功能。
 
-職責：主要負責接收 Line 官方傳來的 Webhook 訊號 (例如：有人傳訊息給機器人了)，然後將這個訊號轉交給 service.py 去處理。
+儀表板: 顯示熱門關鍵字、管理意圖與修飾語。
 
-src/admin.py (後台邏輯)
+審核功能 (/review): 讓管理者查看「未命中」的訊息，並手動撰寫回覆或存入知識庫。
 
-功能：網頁後台的管理者。
+AI 建議: 呼叫 Google Gemini API 產生回覆建議。
 
-職責：處理 /admin 網頁上的所有操作，例如顯示資料庫裡的關鍵字、接收網頁表單送出的新修飾語，並呼叫 database.py 更新資料庫。
+3. 業務邏輯層 (Service / Business Logic)
+src/service.py (大腦):
 
-3. 機器人核心邏輯 (Bot Logic Layer)
-這是機器人「大腦」運作最關鍵的部分：
+這是機器人的核心流程控制中心。
 
-src/service.py (服務核心)
+流程：收到訊息 -> text_processor 斷詞 -> intent_matcher 比對意圖。
 
-功能：機器人的「大腦中樞」。
+自動駕駛 (Auto-Pilot): 若命中意圖且危險度低 -> 呼叫 ai_client 修飾語句 -> 直接回覆。
 
-職責：協調所有工作。當收到訊息時，它會依序命令：
+人工介入 (Human-in-the-loop): 若未命中 -> 存入 pending_messages 資料庫 -> 回覆「請稍候」。
 
-text_processor 進行斷詞。
+src/intent_matcher.py:
 
-intent_matcher 找出使用者的意圖（是求助？還是閒聊？）。
+單純負責演算法邏輯：比對「使用者斷詞」與「資料庫意圖關鍵字」，找出危險指數最高的匹配項目。
 
-ai_client 根據危險指數進行「語句修飾」（加溫暖前綴）。
+4. 工具與資料層 (Utils & Data)
+src/database.py:
 
-最後透過 line_bot_api 將組裝好的訊息回傳給使用者。
+負責所有 MySQL SQL 指令。
 
-src/intent_matcher.py (意圖辨識)
+管理：bot_intents (意圖庫), response_modifiers (修飾語), pending_messages (待審核), chat_logs (對話紀錄)。
 
-功能：機器人的「分類帽」。
+src/text_processor.py:
 
-職責：比對使用者的斷詞與資料庫裡的關鍵字 (keywords)，判斷這句話最接近哪個意圖 (Intent)，並回傳對應的標準答案與危險指數。
+使用 jieba 進行中文斷詞。
 
-src/ai_client.py (修飾模組) [重要修改]
+載入 mydict.txt (自訂詞典) 和 delete_words.txt (停用詞)。
 
-功能：機器人的「潤飾師」。
+分析 files/ 資料夾內的高頻詞彙。
 
-職責：原本是 Google AI，現在改為規則式 (Rule-Based)。它負責讀取資料庫的 response_modifiers，根據 service.py 傳來的 level (修飾等級)，在原本生硬的回覆前後加上「同理心前綴」或「支持性後綴」。
+src/ai_client.py:
 
-4. 資料與工具層 (Data & Tools)
-src/database.py (資料庫操作)
+注意：這個檔案目前主要負責「規則式修飾」(Rule-based polishing)，從資料庫讀取前綴、後綴、語氣詞來包裝回覆，而非直接呼叫 LLM (LLM 是在 admin.py 裡呼叫的)。
 
-功能：資料庫的「管理員」。
+🔄 資料流向 (Data Flow)
+使用者傳訊 ➡️ LINE Server ➡️ controller.py (Webhook)
 
-職責：專門負責執行 SQL 指令。其他程式不能直接碰資料庫，都要透過它來「新增關鍵字」、「讀取修飾語」或「建立新分類」。
+➡️ line_bot_api.py (Handler) ➡️ service.py (handle_message)
 
-src/text_processor.py (文字處理)
+➡️ 斷詞 (text_processor.py) ➡️ 比對 (intent_matcher.py + database.py)
 
-功能：機器人的「翻譯蒟蒻」。
+分支 A (命中): ➡️ ai_client.py (修飾) ➡️ line_bot_api (回覆使用者)。
 
-職責：使用 jieba 函式庫將使用者打的一長串句子（如「我想找人聊聊」）切成單詞（['我', '想', '找', '人', '聊聊']），方便比對。
-
-src/line_bot_api.py (Line API 整合)
-
-功能：Line 的「傳令兵」。
-
-職責：負責初始化 Line Bot SDK，提供發送訊息 (reply_message) 的功能。
-
-5. 其他檔案
-templates/admin.html：後台網頁的「外觀」，使用 HTML 寫成，讓你可以用瀏覽器操作資料庫。
-
-train_bot.py：一個獨立的工具程式。用來讀取 files/ 資料夾裡的 .txt 文章，分析高頻詞彙並存入資料庫（批次訓練用）。
-
-TEST/keyTest.py：用來測試 Line Token 是否有效的簡單腳本。
-
-init_data.py (新建立)：用來初始化資料庫，寫入預設的修飾語 (如「嗯嗯」、「拍拍」)。
+分支 B (未命中): ➡️ database.py (存入 pending) ➡️ line_bot_api (回覆罐頭訊息) ➡️ 管理者 (在 admin.py 介面審核並回覆)。
