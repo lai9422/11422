@@ -104,28 +104,60 @@ def process_reply():
 # ==========================================
 # 3. AI API
 # ==========================================
+# @admin_blueprint.route('/admin/api/generate', methods=['POST'])
+# def ai_generate():
+#     data = request.json
+#     keywords = data.get('keywords', [])
+#     if not keywords: return jsonify({"suggestion": "請先勾選關鍵字..."})
+    
+#     # 檢查 API Key 是否設定，若無則回傳模擬訊息
+#     if not Config.GEMINI_API_KEY: 
+#         return jsonify({"suggestion": "❌ 未設定 API Key，無法連接 AI。"})
+         
+#     try:
+#         genai.configure(api_key=Config.GEMINI_API_KEY)
+#         model = genai.GenerativeModel('gemini-pro')
+#         prompt = (
+#             f"你是一個溫暖的輔導機器人。使用者訊息關鍵字：{', '.join(keywords)}。"
+#             f"請生成一段溫暖、同理且簡短的回覆建議(100字內)。"
+#         )
+#         response = model.generate_content(prompt)
+#         return jsonify({"suggestion": response.text})
+#     except Exception as e:
+#         return jsonify({"suggestion": f"AI Error: {e}"})
 @admin_blueprint.route('/admin/api/generate', methods=['POST'])
 def ai_generate():
     data = request.json
     keywords = data.get('keywords', [])
-    if not keywords: return jsonify({"suggestion": "請先勾選關鍵字..."})
     
-    # 檢查 API Key 是否設定，若無則回傳模擬訊息
-    if not Config.GEMINI_API_KEY: 
-        return jsonify({"suggestion": "❌ 未設定 API Key，無法連接 AI。"})
+    if not keywords:
+        return jsonify({"suggestion": "請先勾選關鍵字，讓暖暖知道該怎麼回應。"})
+
+    if not Config.GEMINI_API_KEY:
+         return jsonify({"suggestion": "❌ 錯誤：尚未設定 GEMINI_API_KEY。"})
          
     try:
         genai.configure(api_key=Config.GEMINI_API_KEY)
         model = genai.GenerativeModel('gemini-pro')
-        prompt = (
-            f"你是一個溫暖的輔導機器人。使用者訊息關鍵字：{', '.join(keywords)}。"
-            f"請生成一段溫暖、同理且簡短的回覆建議(100字內)。"
-        )
-        response = model.generate_content(prompt)
-        return jsonify({"suggestion": response.text})
-    except Exception as e:
-        return jsonify({"suggestion": f"AI Error: {e}"})
 
+        # ==========================================
+        # 🔥 修改：使用 Config 中的人設模板
+        # ==========================================
+        # 將關鍵字組合成字串
+        keywords_str = "、".join(keywords)
+        
+        # 填入模板
+        prompt = Config.AI_CHARACTER_PROMPT.format(keywords=keywords_str)
+
+        # 呼叫 AI
+        response = model.generate_content(prompt)
+        ai_reply = response.text
+
+        return jsonify({"suggestion": ai_reply})
+
+    except Exception as e:
+        print(f"❌ Gemini API 錯誤: {e}")
+        return jsonify({"suggestion": f"暖暖目前連線不穩，請稍後再試。\n(Error: {e})"})
 
 # ==========================================
 # 4. History (歷史紀錄) - 頁面與 API
