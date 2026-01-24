@@ -86,14 +86,59 @@ def delete_modifier(mod_id):
         if 'conn' in locals() and conn.is_connected(): conn.close()
 
 # ==========================================
-# 🔥 審核與歷史紀錄功能 (重點修改區)
+# 🔥 系統設定 (System Settings) - 新增部分
+# ==========================================
+def get_system_setting(key, default_val):
+    """ 取得系統設定值，若無則回傳預設值 """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        # 自動建表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS system_settings (
+                setting_key VARCHAR(50) PRIMARY KEY,
+                setting_value TEXT
+            )
+        """)
+        cursor.execute("SELECT setting_value FROM system_settings WHERE setting_key = %s", (key,))
+        row = cursor.fetchone()
+        return row[0] if row else default_val
+    except Exception as e:
+        print(f"Get Setting Error: {e}")
+        return default_val
+    finally:
+        if 'conn' in locals() and conn.is_connected(): conn.close()
+
+def set_system_setting(key, value):
+    """ 更新系統設定值 """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS system_settings (
+                setting_key VARCHAR(50) PRIMARY KEY,
+                setting_value TEXT
+            )
+        """)
+        # 使用 Replace Into (MySQL) 或是 Insert On Duplicate Update
+        sql = "INSERT INTO system_settings (setting_key, setting_value) VALUES (%s, %s) ON DUPLICATE KEY UPDATE setting_value = %s"
+        cursor.execute(sql, (key, value, value))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Set Setting Error: {e}")
+        return False
+    finally:
+        if 'conn' in locals() and conn.is_connected(): conn.close()
+
+# ==========================================
+# 審核與歷史紀錄功能
 # ==========================================
 
 def save_pending_message(user_id, user_message):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        # 確保表格存在
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS pending_messages (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -113,20 +158,15 @@ def save_pending_message(user_id, user_message):
         if 'conn' in locals() and conn.is_connected(): conn.close()
 
 def get_pending_messages(user_id=None):
-    """ 取得待審核訊息 (支援 User ID 搜尋) """
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        
         sql = "SELECT * FROM pending_messages WHERE status = 'pending'"
         params = []
-        
         if user_id:
             sql += " AND user_id = %s"
             params.append(user_id)
-            
         sql += " ORDER BY created_at DESC"
-        
         cursor.execute(sql, tuple(params))
         return cursor.fetchall()
     except Exception as e:
@@ -145,10 +185,7 @@ def update_message_status(msg_id, status):
     finally:
         if 'conn' in locals() and conn.is_connected(): conn.close()
 
-# --- 對話歷史紀錄 (Chat Logs) ---
-
 def log_chat(user_id, role, message):
-    """ 記錄每句對話 """
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -169,7 +206,6 @@ def log_chat(user_id, role, message):
         if 'conn' in locals() and conn.is_connected(): conn.close()
 
 def get_chat_history_by_user(user_id):
-    """ 取得全部歷史 (給 History 頁面用) """
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -180,17 +216,17 @@ def get_chat_history_by_user(user_id):
         if 'conn' in locals() and conn.is_connected(): conn.close()
 
 def get_recent_chat_history(user_id, limit=5):
-    """ 取得最近 N 筆歷史 (給 Review 頁面 AI 參考用) """
+    """ 取得最近 N 筆歷史 (limit 由參數決定) """
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        # 先抓最新的 N 筆 (DESC)，再轉回時間正序 (ASC)
         sql = f"""
             SELECT * FROM (
                 SELECT * FROM chat_logs WHERE user_id = %s ORDER BY id DESC LIMIT %s
             ) sub ORDER BY id ASC
         """
-        cursor.execute(sql, (user_id, limit))
+        # 這裡的 limit 會由 admin.py 傳進來
+        cursor.execute(sql, (user_id, int(limit)))
         return cursor.fetchall()
     except Exception as e:
         print(f"Get Recent History Error: {e}")
