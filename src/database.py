@@ -221,14 +221,44 @@ def update_message_status(msg_id, status):
 
 # [請加到 src/database.py 最下方]
 
+# def log_chat(user_id, role, message):
+#     """ 記錄一筆對話 (User 或 Bot) """
+#     try:
+#         conn = mysql.connector.connect(
+#             host=Config.DB_HOST, user=Config.DB_USER,
+#             password=Config.DB_PASSWORD, database=Config.DB_NAME
+#         )
+#         cursor = conn.cursor()
+#         sql = "INSERT INTO chat_logs (user_id, role, message) VALUES (%s, %s, %s)"
+#         cursor.execute(sql, (user_id, role, message))
+#         conn.commit()
+#     except Exception as e:
+#         print(f"❌ 記錄對話失敗: {e}")
+#     finally:
+#         if 'conn' in locals() and conn.is_connected(): conn.close()
+
+# ==========================================
+# 新增：對話紀錄與前後文存取
+# ==========================================
 def log_chat(user_id, role, message):
-    """ 記錄一筆對話 (User 或 Bot) """
+    """ 記錄對話 (User/Bot) 到 chat_logs 表 """
     try:
         conn = mysql.connector.connect(
             host=Config.DB_HOST, user=Config.DB_USER,
             password=Config.DB_PASSWORD, database=Config.DB_NAME
         )
         cursor = conn.cursor()
+        # 建立表格 (如果不存在)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS chat_logs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id VARCHAR(255) NOT NULL,
+                role VARCHAR(20) NOT NULL,
+                message TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
         sql = "INSERT INTO chat_logs (user_id, role, message) VALUES (%s, %s, %s)"
         cursor.execute(sql, (user_id, role, message))
         conn.commit()
@@ -237,6 +267,24 @@ def log_chat(user_id, role, message):
     finally:
         if 'conn' in locals() and conn.is_connected(): conn.close()
 
+def get_recent_chat_history(user_id, limit=3):
+    """ 取得最近 N 筆對話紀錄 (供 AI 參考用) """
+    try:
+        conn = mysql.connector.connect(
+            host=Config.DB_HOST, user=Config.DB_USER,
+            password=Config.DB_PASSWORD, database=Config.DB_NAME
+        )
+        cursor = conn.cursor(dictionary=True)
+        # 抓取最近的 N 筆，並依照時間舊->新排序
+        sql = "SELECT * FROM (SELECT * FROM chat_logs WHERE user_id = %s ORDER BY id DESC LIMIT %s) sub ORDER BY id ASC"
+        cursor.execute(sql, (user_id, limit))
+        rows = cursor.fetchall()
+        return rows
+    except Exception as e:
+        print(f"❌ 取得歷史紀錄失敗: {e}")
+        return []
+    finally:
+        if 'conn' in locals() and conn.is_connected(): conn.close()
 def get_chat_history_by_user(user_id):
     """ 取得指定 User 的完整對話紀錄 (依時間排序) """
     try:
@@ -255,3 +303,5 @@ def get_chat_history_by_user(user_id):
         return []
     finally:
         if 'conn' in locals() and conn.is_connected(): conn.close()
+
+

@@ -3,43 +3,68 @@
     <div class="card mb-4 shadow-sm border-0 fade-in">
         <div class="card-header bg-white d-flex justify-content-between align-items-center">
             <span class="badge bg-warning text-dark">待處理</span>
-            <small class="text-muted">{{ msg.created_at }}</small>
+            <small class="text-muted">User: {{ msg.user_id[:8] }}...</small>
         </div>
         <div class="card-body">
-            <div class="mb-3 p-2 bg-light border-start border-4 border-secondary text-secondary">
-                {{ msg.user_message }}
+
+            {% if msg.history_context %}
+            <div class="mb-3 p-3 bg-light rounded border">
+                <label class="form-label fw-bold text-muted small">📜 前情提要 (勾選以提供給 AI)</label>
+                
+                {% for h_msg in msg.history_context %}
+                <div class="mb-2">
+                    <span class="badge {% if h_msg.role == 'bot' %}bg-primary{% else %}bg-secondary{% endif %} me-1">
+                        {{ h_msg.role }}
+                    </span>
+                    <div class="d-inline-flex flex-wrap gap-1 align-middle">
+                        {% for word in h_msg.segmented_words %}
+                        <div>
+                            <input type="checkbox" id="h_{{ msg.id }}_{{ h_msg.id }}_{{ loop.index }}" 
+                                   name="history_kws_{{ msg.id }}" value="{{ word }}" class="word-checkbox history-checkbox">
+                            <label for="h_{{ msg.id }}_{{ h_msg.id }}_{{ loop.index }}" 
+                                   class="word-label small py-0 px-2" style="font-size:0.8rem;">{{ word }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="mb-3">
+                <label class="form-label fw-bold text-primary small">Step 1: 當前訊息關鍵字</label>
+                <div class="p-2 mb-2 bg-light border-start border-4 border-secondary text-secondary small">
+                    {{ msg.user_message }}
+                </div>
+                
+                <div class="d-flex flex-wrap gap-1">
+                    {% for word in msg.segmented_words %}
+                    <div>
+                        <input type="checkbox" id="w_{{ msg.id }}_{{ loop.index }}" 
+                               name="selected_keywords" value="{{ word }}" class="word-checkbox current-checkbox">
+                        <label for="w_{{ msg.id }}_{{ loop.index }}" class="word-label">{{ word }}</label>
+                    </div>
+                    {% endfor %}
+                </div>
             </div>
 
             <form action="/admin/process_reply" method="POST">
                 <input type="hidden" name="msg_id" value="{{ msg.id }}">
                 <input type="hidden" name="user_id" value="{{ msg.user_id }}">
-
-                <div class="mb-3">
-                    <label class="form-label fw-bold text-primary small">Step 1: 勾選關鍵字 (去識別化)</label>
-                    <div class="d-flex flex-wrap gap-1">
-                        {% for word in msg.segmented_words %}
-                        <div>
-                            <input type="checkbox" id="w_{{ msg.id }}_{{ loop.index }}" 
-                                   name="selected_keywords" value="{{ word }}" class="word-checkbox">
-                            <label for="w_{{ msg.id }}_{{ loop.index }}" class="word-label">{{ word }}</label>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-
+                
                 <div class="mb-3">
                     <div class="d-flex justify-content-between mb-1">
                         <label class="form-label fw-bold small">Step 2: 回覆內容</label>
-                        <button class="btn btn-outline-primary btn-sm py-0" type="button" onclick="generateAI('{{ msg.id }}')">
-                            🤖 AI 建議
+                        <button class="btn btn-outline-primary btn-sm py-0" type="button" onclick="generateAI_WithHistory('{{ msg.id }}')">
+                            🤖 參考前後文生成
                         </button>
                     </div>
-                    <textarea name="final_response" id="response_{{ msg.id }}" class="form-control" rows="3" placeholder="輸入回覆..." required></textarea>
+                    <textarea name="final_response" id="response_{{ msg.id }}" class="form-control" rows="3" placeholder="AI 建議將顯示於此..." required></textarea>
                 </div>
 
                 <div class="form-check mb-2">
                     <input class="form-check-input" type="checkbox" name="save_to_db" id="save_{{ msg.id }}" checked>
-                    <label class="form-check-label small text-muted" for="save_{{ msg.id }}">存入資料庫學習</label>
+                    <label class="form-check-label small text-muted" for="save_{{ msg.id }}">存入資料庫學習 (僅當前關鍵字)</label>
                 </div>
 
                 <button type="submit" class="btn btn-success w-100 btn-sm">發送</button>
@@ -47,9 +72,47 @@
         </div>
     </div>
     {% endfor %}
+
+    <script>
+    async function generateAI_WithHistory(msgId) {
+        // 1. 抓取「當前」訊息被勾選的字
+        const currentCbs = document.querySelectorAll(`#w_${msgId}_ input:checked, input[id^="w_${msgId}_"]:checked`);
+        let currentKws = [];
+        currentCbs.forEach(cb => currentKws.push(cb.value));
+
+        // 2. 抓取「歷史」紀錄被勾選的字
+        const historyCbs = document.querySelectorAll(`input[name="history_kws_${msgId}"]:checked`);
+        let historyKws = [];
+        historyCbs.forEach(cb => historyKws.push(cb.value));
+
+        if (currentKws.length === 0 && historyKws.length === 0) {
+            alert("⚠️ 請至少勾選一個關鍵字(當前或歷史)！");
+            return;
+        }
+
+        const textArea = document.getElementById(`response_${msgId}`);
+        textArea.value = "🔄 暖暖正在閱讀前後文...";
+
+        try {
+            const res = await fetch('/admin/api/generate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ 
+                    keywords: currentKws,
+                    history_keywords: historyKws 
+                })
+            });
+            const data = await res.json();
+            textArea.value = data.suggestion;
+        } catch (e) {
+            textArea.value = "AI 連線失敗";
+            console.error(e);
+        }
+    }
+    </script>
+
 {% else %}
     <div class="text-center py-5 text-muted">
-        <h4>🎉 目前沒有新訊息</h4>
-        <p class="small">系統正持續監控中...</p>
+        <p>目前沒有待審核訊息...</p>
     </div>
 {% endif %}
