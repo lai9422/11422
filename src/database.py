@@ -233,3 +233,4 @@ def get_recent_chat_history(user_id, limit=5):
         return []
     finally:
         if 'conn' in locals() and conn.is_connected(): conn.close()
+

@@ -1,10 +1,17 @@
+# generate_sql.py (更新版：直接寫入資料庫)
 import json
 import random
+import sys
+import os
 
-# 1. 定義資料庫欄位結構與基礎資料庫
-# 這裡我們預設一些針對你專案主題 (青少年/性創傷/法律/情緒) 的分類模版
-# 透過 random.choice 或組合的方式來產生大量變化
+# 將路徑設為專案根目錄，確保能讀取到 src
+sys.path.append(os.getcwd())
 
+from src.database import get_db_connection  # 匯入專案原本的連線設定
+
+# ==========================================
+# 1. 資料模版設定 (與之前相同)
+# ==========================================
 data_templates = [
     {
         "category": "緊急求助",
@@ -45,7 +52,7 @@ data_templates = [
     {
         "category": "情緒支持",
         "danger": 1,
-        "action": "AI_EMPATHY_RESPONSE",  # 假設這會觸發你的 AI 生成回覆
+        "action": "AI_EMPATHY_RESPONSE",
         "response_pool": [
             "聽起來你最近壓力很大，願意多跟我說一點嗎？",
             "這種感覺真的很難受，不過我在這裡陪你。",
@@ -98,55 +105,61 @@ data_templates = [
     }
 ]
 
-def generate_sql_file(filename="insert_intents.sql", num_rows=100):
-    with open(filename, "w", encoding="utf-8") as f:
-        # 寫入 SQL 檔頭
-        f.write("INSERT INTO bot_intents (category, keywords, danger, response, action) VALUES \n")
-        
-        values_list = []
-        
-        # 為了產生 "上百種"，我們使用組合生成法
-        # 這裡示範如何透過混和關鍵字來擴充資料量
-        
-        count = 0
-        while count < num_rows:
-            # 1. 隨機選一個分類模版
-            template = random.choice(data_templates)
-            
-            # 2. 隨機選一組基礎關鍵字 (例如 ["摸", "不舒服"])
-            base_keywords = random.choice(template["keywords_pool"])
-            
-            # 3. 為了增加變異性，隨機混入一些同義詞或擴充詞，讓關鍵字組合不同
-            # 這樣資料庫才會有豐富的匹配模式
-            modifiers = ["現在", "真的", "覺得", "好", "一直", "突然"]
-            extra_word = random.choice(modifiers)
-            
-            # 組合出新的關鍵字列表，例如 ["摸", "不舒服", "真的"]
-            # 注意：Python 的 list 傳遞是 reference，要 copy
-            final_keywords = base_keywords.copy()
-            if random.random() > 0.5: # 50% 機率加入修飾詞
-                final_keywords.append(extra_word)
-                
-            # 4. 選一個回應
-            response_text = random.choice(template["response_pool"])
-            
-            # 5. 構建 SQL Value 字串
-            # 注意：keywords 欄位在 SQL 裡通常存成 JSON 字串，需要用 json.dumps 處理中文編碼
-            keywords_json = json.dumps(final_keywords, ensure_ascii=False)
-            
-            # 使用 Python f-string 格式化 SQL
-            # SQL 字串需要跳脫單引號，這裡簡單處理將內容中的單引號代換掉
-            sql_val = f"('{template['category']}', '{keywords_json}', {template['danger']}, '{response_text}', '{template['action']}')"
-            
-            values_list.append(sql_val)
-            count += 1
+modifiers = ["現在", "真的", "覺得", "好", "一直", "突然"]
 
-        # 將所有 VALUES 用逗號連接，並加上分號結尾
-        f.write(",\n".join(values_list))
-        f.write(";\n")
+# ==========================================
+# 2. 核心功能：生成並寫入資料庫
+# ==========================================
+def seed_database(num_rows=100):
+    print(f"🚀 正在生成 {num_rows} 筆資料並準備寫入資料庫...")
+    
+    data_to_insert = []
+    
+    for _ in range(num_rows):
+        # 隨機選取模版
+        template = random.choice(data_templates)
+        
+        # 隨機組合關鍵字
+        base_keywords = random.choice(template["keywords_pool"])
+        extra_word = random.choice(modifiers)
+        
+        final_keywords = base_keywords.copy()
+        if random.random() > 0.5:
+            final_keywords.append(extra_word)
+            
+        # 準備單筆資料 (Tuple 格式)
+        # 注意：SQL 需要 JSON 格式的字串，所以這裡先 dumps
+        data_to_insert.append((
+            template['category'],
+            json.dumps(final_keywords, ensure_ascii=False), # 將 list 轉為 JSON 字串
+            template['danger'],
+            random.choice(template['response_pool']),
+            template['action']
+        ))
 
-    print(f"✅ 成功生成 {num_rows} 筆資料至 {filename}")
+    # 開始寫入資料庫
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        sql = """
+            INSERT INTO bot_intents (category, keywords, danger, response, action) 
+            VALUES (%s, %s, %s, %s, %s)
+        """
+        
+        # executemany 可以一次寫入大量資料，效能比迴圈一筆筆 insert 好很多
+        cursor.executemany(sql, data_to_insert)
+        conn.commit()
+        
+        print(f"✅ 成功！已將 {cursor.rowcount} 筆新回覆寫入 bot_intents 資料表。")
+        
+    except Exception as e:
+        print(f"❌ 寫入失敗: {e}")
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
 
-# 執行生成函數，產生 200 筆資料
 if __name__ == "__main__":
-    generate_sql_file("insert_intents.sql", 200)
+    # 你可以在這裡設定要產生幾筆，例如 200 筆
+    seed_database(200)
