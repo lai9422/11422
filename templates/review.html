@@ -3,38 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>訊息審核 (Live)</title>
+    <title>訊息審核控制台</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         .word-checkbox { display: none; }
-        .word-label { cursor: pointer; padding: 4px 10px; border: 1px solid #ced4da; border-radius: 20px; font-size: 0.9em; background: #fff; transition: 0.2s; }
+        .word-label { cursor: pointer; padding: 4px 10px; border: 1px solid #ced4da; border-radius: 20px; font-size: 0.85em; background: #fff; transition: 0.2s; }
         .word-checkbox:checked + .word-label { background-color: #0d6efd; color: white; border-color: #0d6efd; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .fade-in { animation: fadeIn 0.4s ease-out; }
+        .scroll-area { max-height: 70vh; overflow-y: auto; padding-right: 10px; }
+        .card-header-sticky { position: sticky; top: 0; z-index: 10; background: #f8f9fa; border-bottom: 2px solid #dee2e6; margin-bottom: 15px; padding: 10px; }
     </style>
 </head>
 <body class="bg-light">
 
-<div class="container py-4" style="max-width: 800px;">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3 class="mb-0">🛡️ 訊息審核 <span class="badge bg-danger fs-6 blink">Live</span></h3>
-        <a href="/admin" class="btn btn-outline-secondary btn-sm">回主控台</a>
-    </div>
-
-    <div class="card mb-3 shadow-sm border-0">
-        <div class="card-body py-2">
-            <form action="/admin/review" method="GET" class="row g-2 align-items-center">
+<div class="container-fluid py-3 px-4">
+    <div class="card mb-4 shadow-sm border-0">
+        <div class="card-body">
+            <form action="/admin/review" method="GET" class="row g-3 align-items-center">
                 <div class="col-auto">
-                    <label class="fw-bold small">篩選使用者:</label>
+                    <h5 class="mb-0 text-primary fw-bold">選擇使用者 ID</h5>
                 </div>
-                <div class="col">
-                    <input type="text" name="user_id" class="form-control form-control-sm" 
-                           value="{{ user_id }}" placeholder="輸入 User ID (留空顯示全部)">
+                <div class="col-md-4">
+                    <input type="text" name="user_id" class="form-control" 
+                           value="{{ user_id }}" placeholder="輸入 User ID 或留空顯示全部">
                 </div>
                 <div class="col-auto">
-                    <button type="submit" class="btn btn-primary btn-sm">🔍 搜尋</button>
+                    <button type="submit" class="btn btn-primary">🔍 執行搜尋</button>
                     {% if user_id %}
-                    <a href="/admin/review" class="btn btn-outline-secondary btn-sm">清除</a>
+                    <a href="/admin/review" class="btn btn-outline-secondary">清除過濾</a>
                     {% endif %}
                 </div>
             </form>
@@ -47,27 +42,24 @@
 </div>
 
 <script>
-    // 取得目前篩選的 User ID (給 JS 用)
     const currentFilterUser = "{{ user_id }}";
 
     async function generateAI_WithHistory(msgId) {
-        // 1. 當前關鍵字
         const currentCbs = document.querySelectorAll(`input[id^="w_${msgId}_"]:checked`);
         let currentKws = [];
         currentCbs.forEach(cb => currentKws.push(cb.value));
 
-        // 2. 歷史關鍵字
         const historyCbs = document.querySelectorAll(`input[name="history_kws_${msgId}"]:checked`);
         let historyKws = [];
         historyCbs.forEach(cb => historyKws.push(cb.value));
 
         if (currentKws.length === 0 && historyKws.length === 0) {
-            alert("請至少勾選一個關鍵字(當前或歷史)！");
+            alert("請至少勾選一個關鍵字！");
             return;
         }
 
         const textArea = document.getElementById(`response_${msgId}`);
-        textArea.value = "🔄 AI 生成中...";
+        textArea.value = "🔄 AI 正在思考中...";
         try {
             const res = await fetch('/admin/api/generate', {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -83,7 +75,6 @@
                        (document.activeElement && document.activeElement.tagName === 'TEXTAREA');
         if (isBusy) return;
 
-        // 🔥 URL 加上 user_id 參數，確保搜尋狀態不被洗掉
         let url = '/admin/api/review_content?t=' + new Date().getTime();
         if (currentFilterUser) {
             url += '&user_id=' + encodeURIComponent(currentFilterUser);
@@ -94,7 +85,7 @@
             .then(html => document.getElementById('live-review-content').innerHTML = html)
             .catch(e => console.error(e));
     }
-    setInterval(autoRefresh, 3000);
+    setInterval(autoRefresh, 5000); // 延長到 5 秒避免干擾
 </script>
 </body>
 </html>
