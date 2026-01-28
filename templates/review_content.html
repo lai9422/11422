@@ -1,100 +1,116 @@
 {% if pending_msgs %}
-    {% for msg in pending_msgs %}
-    <div class="card mb-5 shadow border-0 overflow-hidden">
-        <form action="/admin/process_reply" method="POST">
-            <input type="hidden" name="msg_id" value="{{ msg.id }}">
-            <input type="hidden" name="user_id" value="{{ msg.user_id }}">
+    {# 1. 依照 user_id 進行分組排序 #}
+    {% for user_id, user_msgs in pending_msgs | sort(attribute='user_id') | groupby('user_id') %}
+    
+    {# 取出第一則訊息以獲取共用的歷史紀錄 (因為同一人的歷史紀錄是一樣的) #}
+    {% set first_msg = user_msgs[0] %}
 
-            <div class="row g-0">
-                <div class="col-md-5 border-end bg-white">
-                    <div class="p-3">
-                        <h6 class="fw-bold text-muted border-bottom pb-2 mb-3">📜 歷史訊息 (勾選加入 AI 參考)</h6>
-                        <div class="scroll-area">
-                            {% if msg.history_context %}
-                                {% for h_msg in msg.history_context %}
+    <div class="card mb-5 shadow border-0 overflow-hidden border-primary">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-bold">👤 User: {{ user_id }}</h5>
+            <span class="badge bg-white text-primary">{{ user_msgs|length }} 則待審</span>
+        </div>
+
+        <div class="row g-0">
+            <div class="col-md-4 border-end bg-white">
+                <div class="p-3 sticky-top" style="top: 0; max-height: 80vh; overflow-y: auto;">
+                    <h6 class="fw-bold text-muted border-bottom pb-2 mb-3">📜 歷史訊息 (勾選加入 AI 參考)</h6>
+                    
+                    {% if first_msg.history_context %}
+                        {% for h_msg in first_msg.history_context %}
+                        <div class="mb-3 border-bottom pb-2">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="badge {% if h_msg.role == 'bot' %}bg-info{% else %}bg-secondary{% endif %}">
+                                    {{ h_msg.role }}
+                                </span>
+                                <small class="text-muted" style="font-size: 0.7em;">{{ h_msg.created_at }}</small>
+                            </div>
+                            <div class="text-dark small mb-1">{{ h_msg.message }}</div>
+                            <div class="d-flex flex-wrap gap-1">
+                                {% for word in h_msg.segmented_words %}
+                                <input type="checkbox" id="h_{{ user_id }}_{{ h_msg.id }}_{{ loop.index }}" 
+                                       name="history_kws_user_{{ user_id }}" value="{{ word }}" class="word-checkbox">
+                                <label for="h_{{ user_id }}_{{ h_msg.id }}_{{ loop.index }}" class="word-label small text-muted" style="font-size: 0.75rem; padding: 2px 8px;">{{ word }}</label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-center text-muted py-4">無歷史紀錄</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="col-md-8 bg-light">
+                <div class="p-3">
+                    <h6 class="fw-bold text-danger mb-3">🚨 待審訊息列表</h6>
+                    
+                    {% for msg in user_msgs %}
+                    <div class="card mb-3 shadow-sm border-0">
+                        <div class="card-body">
+                            <form action="/admin/process_reply" method="POST">
+                                <input type="hidden" name="msg_id" value="{{ msg.id }}">
+                                <input type="hidden" name="user_id" value="{{ msg.user_id }}">
+
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="badge bg-warning text-dark">訊息 #{{ msg.id }}</span>
+                                    <span class="text-muted small">{{ msg.created_at }}</span>
+                                </div>
+
+                                <div class="p-3 mb-3 bg-light rounded border-start border-4 border-danger">
+                                    <p class="mb-0 fw-bold text-dark">{{ msg.user_message }}</p>
+                                </div>
+
                                 <div class="mb-3">
-                                    <div class="d-flex justify-content-between mb-1">
-                                        <span class="badge {% if h_msg.role == 'bot' %}bg-info{% else %}bg-secondary{% endif %}">
-                                            {{ h_msg.role }}
-                                        </span>
-                                    </div>
+                                    <label class="form-label small fw-bold text-primary">當前關鍵字：</label>
                                     <div class="d-flex flex-wrap gap-1">
-                                        {% for word in h_msg.segmented_words %}
-                                        <input type="checkbox" id="h_{{ msg.id }}_{{ h_msg.id }}_{{ loop.index }}" 
-                                               name="history_kws_{{ msg.id }}" value="{{ word }}" class="word-checkbox">
-                                        <label for="h_{{ msg.id }}_{{ h_msg.id }}_{{ loop.index }}" class="word-label small text-muted">{{ word }}</label>
+                                        {% for word in msg.segmented_words %}
+                                        <input type="checkbox" id="w_{{ msg.id }}_{{ loop.index }}" 
+                                               name="selected_keywords" value="{{ word }}" class="word-checkbox">
+                                        <label for="w_{{ msg.id }}_{{ loop.index }}" class="word-label">{{ word }}</label>
                                         {% endfor %}
                                     </div>
                                 </div>
-                                {% endfor %}
-                            {% else %}
-                                <p class="text-center text-muted py-4">無歷史紀錄</p>
-                            {% endif %}
+
+                                <div class="bg-light p-3 rounded border">
+                                    <div class="row g-3">
+                                        <div class="col-md-5 border-end">
+                                            <label class="small text-muted mb-1">危險評級：</label>
+                                            <select name="danger_level" class="form-select form-select-sm mb-2">
+                                                <option value="0" selected>🟢 安全 (0)</option>
+                                                <option value="1">🔵 輕微 (1)</option>
+                                                <option value="2">🟡 注意 (2)</option>
+                                                <option value="3">🟠 警示 (3)</option>
+                                                <option value="4">🔴 危險 (4)</option>
+                                                <option value="5">☠️ 極危 (5)</option>
+                                            </select>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="save_to_db" id="save_{{ msg.id }}" checked>
+                                                <label class="form-check-label small" for="save_{{ msg.id }}">存入 DB</label>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="col-md-7">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <label class="small fw-bold">回覆內容</label>
+                                                <button class="btn btn-sm btn-outline-primary py-0" type="button" 
+                                                        onclick="generateAI_WithHistory('{{ msg.id }}', '{{ user_id }}')">
+                                                    🤖 生成建議
+                                                </button>
+                                            </div>
+                                            <textarea name="final_response" id="response_{{ msg.id }}" class="form-control mb-2" rows="3" required></textarea>
+                                            <button type="submit" class="btn btn-success btn-sm w-100">發送回覆</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </form>
                         </div>
                     </div>
-                </div>
-
-                <div class="col-md-7 bg-white">
-                    <div class="p-3">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h6 class="fw-bold text-danger mb-0">🚨 待審訊息</h6>
-                            <span class="text-muted small">User: {{ msg.user_id[:8] }}...</span>
-                        </div>
-                        
-                        <div class="p-3 mb-3 bg-light rounded border-start border-4 border-warning">
-                            <p class="mb-0 fw-bold text-dark">{{ msg.user_message }}</p>
-                        </div>
-
-                        <label class="form-label small fw-bold text-primary">選取當前關鍵字：</label>
-                        <div class="d-flex flex-wrap gap-1 mb-4">
-                            {% for word in msg.segmented_words %}
-                            <input type="checkbox" id="w_{{ msg.id }}_{{ loop.index }}" 
-                                   name="selected_keywords" value="{{ word }}" class="word-checkbox">
-                            <label for="w_{{ msg.id }}_{{ loop.index }}" class="word-label">{{ word }}</label>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card-footer bg-light p-4 border-top">
-                <div class="row g-4">
-                    <div class="col-md-6">
-                        <label class="form-label fw-bold">🛠️ 存入資料庫與各項設定</label>
-                        <div class="p-3 bg-white rounded border">
-                            <div class="mb-3">
-                                <label class="small text-muted mb-1">危險程度評級：</label>
-                                <select name="danger_level" class="form-select">
-                                    <option value="0" selected>🟢 安全 (Level 0)</option>
-                                    <option value="1">🔵 輕微 (Level 1)</option>
-                                    <option value="2">🟡 注意 (Level 2)</option>
-                                    <option value="3">🟠 警示 (Level 3)</option>
-                                    <option value="4">🔴 危險 (Level 4)</option>
-                                    <option value="5">☠️ 極危 (Level 5)</option>
-                                </select>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="save_to_db" id="save_{{ msg.id }}" checked>
-                                <label class="form-check-label small" for="save_{{ msg.id }}">
-                                    存入資料庫供 AI 機器學習
-                                </label>
-                            </div>
-                        </div>
-                    </div>
+                    {% endfor %}
                     
-                    <div class="col-md-6">
-                        <div class="d-flex justify-content-between align-items-baseline mb-2">
-                            <label class="form-label fw-bold">🤖 AI 建議回覆</label>
-                            <button class="btn btn-sm btn-outline-primary" type="button" onclick="generateAI_WithHistory('{{ msg.id }}')">
-                                重新生成
-                            </button>
-                        </div>
-                        <textarea name="final_response" id="response_{{ msg.id }}" class="form-control mb-3" rows="4" placeholder="點擊生成或輸入回覆..." required></textarea>
-                        <button type="submit" class="btn btn-success w-100 py-2 fw-bold">確認並發送訊息</button>
-                    </div>
                 </div>
             </div>
-        </form>
+        </div>
     </div>
     {% endfor %}
 {% else %}

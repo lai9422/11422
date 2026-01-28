@@ -44,35 +44,46 @@
 <script>
     const currentFilterUser = "{{ user_id }}";
 
-    async function generateAI_WithHistory(msgId) {
+    // 修改：增加 userId 參數，因為歷史紀錄現在是以 User 為單位共用的
+    async function generateAI_WithHistory(msgId, userId) {
+        // 1. 抓取當前訊息的關鍵字 (綁定在 msgId)
         const currentCbs = document.querySelectorAll(`input[id^="w_${msgId}_"]:checked`);
         let currentKws = [];
         currentCbs.forEach(cb => currentKws.push(cb.value));
 
-        const historyCbs = document.querySelectorAll(`input[name="history_kws_${msgId}"]:checked`);
+        // 2. 抓取該使用者的歷史關鍵字 (綁定在 userId)
+        // 注意：name 屬性已在 HTML 中改為 history_kws_user_{{ user_id }}
+        const historyCbs = document.querySelectorAll(`input[name="history_kws_user_${userId}"]:checked`);
         let historyKws = [];
         historyCbs.forEach(cb => historyKws.push(cb.value));
 
         if (currentKws.length === 0 && historyKws.length === 0) {
-            alert("請至少勾選一個關鍵字！");
+            alert("請至少勾選一個關鍵字（當前或歷史）！");
             return;
         }
 
         const textArea = document.getElementById(`response_${msgId}`);
         textArea.value = "🔄 AI 正在思考中...";
+        
         try {
             const res = await fetch('/admin/api/generate', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ keywords: currentKws, history_keywords: historyKws })
             });
             const data = await res.json();
             textArea.value = data.suggestion;
-        } catch { textArea.value = "連線失敗"; }
+        } catch (e) { 
+            console.error(e);
+            textArea.value = "連線失敗"; 
+        }
     }
 
     function autoRefresh() {
+        // 檢查是否有正在操作 (勾選框或正在打字)
         const isBusy = document.querySelectorAll('input[type="checkbox"]:checked').length > 0 || 
                        (document.activeElement && document.activeElement.tagName === 'TEXTAREA');
+        
         if (isBusy) return;
 
         let url = '/admin/api/review_content?t=' + new Date().getTime();
@@ -85,7 +96,8 @@
             .then(html => document.getElementById('live-review-content').innerHTML = html)
             .catch(e => console.error(e));
     }
-    setInterval(autoRefresh, 5000); // 延長到 5 秒避免干擾
+    
+    setInterval(autoRefresh, 5000); 
 </script>
 </body>
 </html>
